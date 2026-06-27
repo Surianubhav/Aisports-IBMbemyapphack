@@ -1,7 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const fetch = require('node-fetch');
 
-// Initialize your Supabase client connection
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 module.exports = async (req, res) => {
@@ -18,21 +17,19 @@ module.exports = async (req, res) => {
   let systemMessage = "You are an expert football analyst. Explain football regulations, tactical shifts, and match milestones with extreme transparency.";
   
   if (context === "event-explainer") {
-    userQuery = `Context: ${matchContext}. Explain the rule mechanics and impact of a ${eventType} received by ${playerName} in the ${matchTime} minute of the World Cup match.`;
+    userQuery = `Context: ${matchContext}. Explain the rule mechanics and tactical impact of a ${eventType} received by ${playerName} in the ${matchTime} minute of the World Cup match.`;
   }
 
   try {
-    // 1. Fetch explanation from IBM Watsonx / Open-Source Granite Architecture Gateway
-    const watsonxResponse = await fetch("https://us-south.ml.cloud.ibm.com/ml/v1/chat/completions?version=2024-05-01", {
+    // Calling the exact IBM Granite model via DeepInfra's card-free open API gateway
+    const response = await fetch("https://api.deepinfra.com/v1/openai/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.WATSONX_API_KEY}`,
-        "Content-Type": "application/json",
-        "Accept": "application/json"
+        "Authorization": `Bearer ${process.env.WATSONX_API_KEY}`, // Put your DeepInfra Token here
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model_id: "ibm/granite-3-8b-instruct",
-        project_id: process.env.WATSONX_PROJECT_ID,
+        model: "ibm/granite-3-8b-instruct",
         messages: [
           { role: "system", content: systemMessage },
           { role: "user", content: userQuery }
@@ -41,19 +38,18 @@ module.exports = async (req, res) => {
       })
     });
 
-    const aiData = await watsonxResponse.json();
+    const aiData = await response.json();
     const aiText = aiData.choices[0].message.content;
 
-    // 2. Log query metrics transaction into Supabase asynchronously
+    // Log query metrics into Supabase table securely
     await supabase.from('chat_history').insert([
       { user_query: userQuery, ai_response: aiText }
     ]);
 
-    // 3. Return payload back down to MatchMind dashboard
     return res.status(200).json({
       explanation: aiText,
       reply: aiText,
-      questions: ["How does VAR review this?", "What are the physical consequences?", "Historical precedents?"]
+      questions: ["How does VAR review this?", "What are the rules regarding this?", "Historical precedents?"]
     });
 
   } catch (error) {
